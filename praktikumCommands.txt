@@ -1,0 +1,246 @@
+#Create GFF
+for i in `ls Genome | grep '.fa$'`; do
+sample=`basename -s .fa $i`
+input=${sample}.fa
+output=${sample}_gene2.gff3
+gth -genomic Genome/${input} -cdna Target/Zm00001d049443_mRNA2.fa -gff3out\
+ -o ${output} -startcodon -finalstopcodon -cdnaforward -intermediate -v
+done
+
+#Create CDS GFF
+for i in `ls | grep 'gene2.gff3$'`; do
+sample=`basename -s .gff3 $i`
+target=`basename -s _gene2 ${sample}`
+gff=${sample}.gff3
+output=${sample}_CDS.gff3
+fasta=${target}.fa
+gt cds -seqfile Genome/${fasta} -v -matchdescstart -force -o CDSannotation/${output} \
+${gff}
+done
+
+#Rename files
+for i in `ls | grep 'gene1.gff3$'`; do
+sample=`basename -s _gene1.gff3 $i`
+mv $i GFFs/${sample}_Zm00001d049443_mRNA1.gff3
+done
+
+for i in `ls | grep 'gene2_transcript.fa$'`; do
+sample=`basename -s _gene2_transcript.fa $i`
+mv $i transcriptSequences/${sample}_Zm00001d049443_mRNA2_transcript.fa
+done
+
+for i in `ls | grep 'gene2_CDS.fa$'`; do
+sample=`basename -s _gene2_CDS.fa $i`
+mv $i ${sample}_Zm00001d049443_mRNA2_CDS.fa
+done
+
+#Index reference genomes
+for i in `ls | grep '.fa$'`; do
+gt seq -recreate $i
+done
+
+#Create CDS GFF
+
+for i in `ls ~/GFFs | grep 'mRNA1.gff3$'`; do
+sample=`basename -s .gff3 $i`
+reference=`basename -s _Zm00001d049443_mRNA1.gff3 $i`
+gt cds -startcodon yes -finalstopcodon yes -usedesc yes -v -force -seqfile ~/Genome/${reference}.fa \
+-o ~/CDSannotation/${sample}_CDS.gff3 ~/GFFs/${sample}.gff3
+done
+
+#Create Exon fasta
+
+for s in mRNA1 mRNA2; do
+for i in `ls GFFs | grep "${s}.gff3$"`; do
+sample=`basename -s .gff3 $i`
+target=`basename -s _Zm00001d049443_${s} ${sample}`
+gff=${sample}.gff3
+output=${sample}.fa
+fasta=${target}.fa
+gffread -w exonSequence/${output} -g Genome/${fasta} GFFs/${gff}
+done
+done 
+
+#Extract CDS fasta sequence
+for s in mRNA1 mRNA2; do
+for i in `ls CDSannotation | grep ${s}_CDS.gff3$`; do
+sample=`basename -s .gff3 $i`
+target=`basename -s _Zm00001d049443_${s}_CDS ${sample}`
+gff=${sample}.gff3
+output=${sample}.fa
+fasta=${target}.fa
+gffread -C -x CDSsequence/${output} -g Genome/${fasta} CDSannotation/${gff} &
+done
+wait
+done
+
+#Translate CDS to protein
+for i in `ls ~/CDSsequence | grep '.fa$'`; do
+sample=`basename -s .fa $i`
+seqkit translate CDSsequence/$i > ~/translatedProtein/${sample}_protein.fa
+done
+
+
+
+
+
+for i in `ls Genome | grep '.fa$'`; do
+samtools faidx Genome/$i
+done
+
+
+
+#BLAST parameters 
+
+sseqid slen sstart send sseq evalue bitscore score length pident qcovus
+
+#Split multifasta
+
+for i in `ls .. | grep '.fa$'`; do
+seqkit split ../$i -i
+done
+
+#BLAST loop
+
+for s in mRNA1 mRNA2; do
+for i in `ls ~// | grep .fa$`; do
+sample=`basename -s .fa $i`
+blastn -subject ~/exonSequence/$i\
+ -query ~/Target/Zm00001d049443_${s}.fa -outfmt "6 sseqid qseqid slen sstart send evalue bitscore\
+  score length pident qcovus" > ~/BLASTResults/${sample}.blastn.txt &
+done
+wait
+done
+
+
+for s in mRNA1 mRNA2; do
+for i in `ls ~/exonSequence/splitfastas`; do
+for j in `ls ~/exonSequence/splitfastas/$i`; do
+sample=`basename -s .fa.split $j`
+blastn -subject ~/exonSequence/splitfastas/$i/$j\
+ -query ~/Target/Zm00001d049443_${s}.fa -outfmt "6 sseqid qseqid slen sstart send evalue bitscore\
+  score length pident qcovus" > ~/BLASTResults/${sample}.blastn.txt &
+done
+wait
+done
+done
+
+#BLAST loop reversed query/subject
+
+for s in mRNA1 mRNA2; do
+for i in `ls ~/exonSequence/ | grep .fa$`; do
+sample=`basename -s .fa $i`
+blastn -subject ~/Target/Zm00001d049443_${s}.fa\
+ -query ~/exonSequence/$i -outfmt "6 sseqid qseqid slen sstart send evalue bitscore\
+  score length pident qcovus" > ~/BLASTResults/${sample}.blastn.reverse.txt &
+done
+wait
+done
+
+for s in mRNA1 mRNA2; do
+for i in `ls ~/CDSsequence/ | grep .fa$`; do
+sample=`basename -s .fa $i`
+blastp -subject ~/Target/Zm00001d049443_${s}.fa\
+ -query ~/CDSsequence/$i -outfmt "6 sseqid qseqid slen sstart send evalue bitscore\
+  score length pident qcovus" > ~/BLASTResults/${sample}.blastp.reverse.txt &
+done
+wait
+done
+
+
+for s in mRNA1 mRNA2; do
+for i in `ls ~/exonSequence/splitfastas`; do
+for j in `ls ~/exonSequence/splitfastas/$i`; do
+sample=`basename -s .fa.split $j`
+blastn -subject ~/Target/Zm00001d049443_${s}.fa\
+ -query ~/exonSequence/splitfastas/$i/$j -outfmt "6 sseqid slen sstart send evalue bitscore\
+  score length pident qcovus" > ~/BLASTResults/${sample}.blastn.reverse.txt &
+done
+wait
+done
+done
+
+for s in mRNA1 mRNA2; do
+for i in `ls ~/exonSequence/splitfastas`; do
+for j in `ls ~/exonSequence/splitfastas/$i`; do
+sample=`basename -s .fa.split $j`
+blastn -subject ~/Target/Zm00001d049443_${s}.fa\
+ -query ~/exonSequence/splitfastas/$i/$j -outfmt "6 sseqid qseqid slen sstart send evalue bitscore\
+  score length pident qcovus" > ~/BLASTResults/${sample}.blastn.reverse.txt &
+done
+wait
+done
+done
+
+#BLAST proteins
+
+for s in 1 2; do
+for i in `ls ~/translatedProtein/splitfastas`; do
+for j in `ls ~/translatedProtein/splitfastas/$i | grep mRNA${s}`; do
+sample=`basename -s .fa $j`
+blastp -subject ~/translatedProtein/splitfastas/$i\
+ -query ~/Target/Zm00001d049443_protein${s}.fa -outfmt "6 sseqid qseqid slen sstart send evalue bitscore\
+  score length pident qcovus" > ~/BLASTProteinResults/${sample}.blastp.txt &
+done
+wait
+done
+done
+
+for s in 1 2; do
+for i in `ls ~/translatedProtein/splitfastas`; do
+for j in `ls ~/translatedProtein/splitfastas/$i | grep mRNA${s}`; do
+sample=`basename -s .fa $j`
+blastp -subject ~/Target/Zm00001d049443_protein${s}.fa\
+ -query ~/translatedProtein/splitfastas/$i -outfmt "6 sseqid qseqid slen sstart send evalue bitscore\
+  score length pident qcovus" > ~/BLASTProteinResults/${sample}.blastp.reverse.txt &
+done
+wait
+done
+done
+
+for i in `ls ~/translatedProtein/splitfastas`; do
+for j in `ls ~/translatedProtein/splitfastas/$i | grep PHG83_v1_scaffolds_Zm00001d049443_mRNA1`; do
+sample=`basename -s .fa $j`
+blastp -subject ~/translatedProtein/splitfastas/$i\
+ -query ~/Target/Zm00001d049443_protein1.fa -outfmt "6 sseqid qseqid slen sstart send evalue bitscore\
+  score length pident qcovus" > ~/BLASTProteinResults/${sample}.blastp.txt &
+done
+done
+
+
+#Concatenate BLAST.txt and BLAST.reverse.txt
+
+for i in `ls | grep blastn.txt$`; do
+sample=`basename -s .txt $i`
+cat ${sample}.txt > ${sample}_fullResults.txt
+cat ${sample}.reverse.txt >> ${sample}_fullResults.txt
+done
+
+#Rename Files
+
+for i in `ls | grep B73`; do
+suffix=`echo $i | cut -d '_' -f 2,3,4`
+mv $i B73.${suffix}
+done
+
+for i in `ls | grep v1`; do
+sample=`echo $i | cut -d '_' -f 1`
+suffix=`echo $i | cut -d '_' -f 4,5,6`
+mv $i ${sample}.${suffix}
+done
+
+for i in `ls | grep B73`; do
+suffix=`echo $i | cut -d '_' -f 2,3,4,5,6`
+mv $i B73.${suffix}
+done
+
+for i in `ls | grep v1`; do
+sample=`echo $i | cut -d '_' -f 1`
+suffix=`echo $i | cut -d '_' -f 4,5,6,7,8`
+mv $i ${sample}.${suffix}
+done
+
+for i in `ls | grep B73.mRNA`; do
+suffix=`echo $i | cut -d '.' -f 2,3,4,5`
+mv $i B73.Zm00001d049443_${suffix}
+done
