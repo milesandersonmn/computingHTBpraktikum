@@ -23,9 +23,51 @@ esac
 done
 
 genomeName=`basename -s .fa $GENOME`
-geneModel=`basename -s ,fa $TRANSCRIPT`
+geneModel=`basename -s .fa $TRANSCRIPT`
 fileName=${genomeName}_${geneModel}
 
 gth -genomic $GENOME -cdna $TRANSCRIPT -protein $PROTEIN \
 -gff3out -o $OUTPUT/$fileName.gff3 -startcodon -finalstopcodon -cdnaforward \
 -skipalignmentout -v -exact -species maize -force
+
+gffread -w $OUTPUT/$fileName_exon.fa -g $GENOME $OUTPUT/$fileName.gff3 &
+
+gffread -C -x $OUTPUT/$fileName_CDS.fa -g $GENOME $OUTPUT/$fileName.gff3
+
+seqkit translate $OUTPUT/$fileName_CDS.fa > $OUTPUT/$fileName_protein.fa
+
+#Exon BLAST
+
+blastn -subject $OUTPUT/$fileName_exon.fa \
+-query $TRANSCRIPT -outfmt "6 slen qlen sstart qstart send qend length pident\
+  qcovus" > $OUTPUT/$fileName_exon.blastn.txt &
+  
+blastn -subject $TRANSCRIPT \
+-query $OUTPUT/$fileName_exon.fa -outfmt "6 \
+ qcovus" > $OUTPUT/$fileName_exon.blastn.reverse.txt &
+ 
+ #Protein BLAST
+ 
+blastp -subject $OUTPUT/$fileName_protein.fa \
+-query $PROTEIN -outfmt "6 slen qlen sstart qstart send qend length pident \
+qcovs" > $OUTPUT/$fileName_protein.blastp.txt &
+  
+blastp -subject $PROTEIN \
+-query $OUTPUT/$fileName_protein.fa -outfmt "6 \
+qcovs" > $OUTPUT/$fileName_protein.blastp.reverse.txt &
+
+#Concatenate BLAST and reverse BLAST
+
+for i in `ls $OUTPUT | grep blastp.txt$`; do
+sample=`basename -s .txt $i`
+paste $OUTPUT/${sample}.txt $OUTPUT/${sample}.reverse.txt > \
+$OUTPUT/${sample}.combined.txt
+done
+
+for i in `ls $OUTPUT | grep blastn.txt$`; do
+sample=`basename -s .txt $i`
+paste $OUTPUT/${sample}.txt $OUTPUT/${sample}.reverse.txt > \
+$OUTPUT/${sample}.combined.txt
+done
+
+
