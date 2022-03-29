@@ -58,16 +58,11 @@ qcovs" > ${OUTPUT}/${fileName}_protein.blastp.reverse.txt &
 
 #Concatenate BLAST and reverse BLAST
 
-for i in `ls ${OUTPUT} | grep blastp.txt$`; do
-sample=`basename -s .txt $i`
-paste ${OUTPUT}/${sample}.txt ${OUTPUT}/${sample}.reverse.txt > \
-${OUTPUT}/${sample}.combined.txt
-done
+paste ${OUTPUT}/${fileName}_protein.blastp.txt ${OUTPUT}/${fileName}_protein.blastp.reverse.txt > \
+${OUTPUT}/${fileName}_protein.blastp.combined.txt
 
-for i in `ls ${OUTPUT} | grep blastn.txt$`; do
-sample=`basename -s .txt $i`
-paste ${OUTPUT}/${sample}.txt ${OUTPUT}/${sample}.reverse.txt > \
-${OUTPUT}/${sample}.combined.txt
-done
+paste ${OUTPUT}/${fileName}_exon.blastn.txt ${OUTPUT}/${fileName}_exon.blastn.reverse.txt > \
+${OUTPUT}/${fileName}_exon.blastn.combined.txt
+
 
 
