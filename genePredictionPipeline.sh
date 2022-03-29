@@ -27,47 +27,47 @@ geneModel=`basename -s .fa $TRANSCRIPT`
 fileName=${genomeName}_${geneModel}
 
 gth -genomic $GENOME -cdna $TRANSCRIPT -protein $PROTEIN \
--gff3out -o $OUTPUT/$fileName.gff3 -startcodon -finalstopcodon -cdnaforward \
+-gff3out -o ${OUTPUT}/${fileName}.gff3 -startcodon -finalstopcodon -cdnaforward \
 -skipalignmentout -v -exact -species maize -force
 
-gffread -w $OUTPUT/$fileName_exon.fa -g $GENOME $OUTPUT/$fileName.gff3 &
+gffread -w ${OUTPUT}/${fileName}_exon.fa -g $GENOME ${OUTPUT}/${fileName}.gff3 &
 
-gffread -C -x $OUTPUT/$fileName_CDS.fa -g $GENOME $OUTPUT/$fileName.gff3
+gffread -C -x ${OUTPUT}/${fileName}_CDS.fa -g $GENOME ${OUTPUT}/${fileName}.gff3
 
-seqkit translate $OUTPUT/$fileName_CDS.fa > $OUTPUT/$fileName_protein.fa
+seqkit translate ${OUTPUT}/${fileName}_CDS.fa > ${OUTPUT}/${fileName}_protein.fa
 
 #Exon BLAST
 
-blastn -subject $OUTPUT/$fileName_exon.fa \
+blastn -subject ${OUTPUT}/${fileName}_exon.fa \
 -query $TRANSCRIPT -outfmt "6 slen qlen sstart qstart send qend length pident\
-  qcovus" > $OUTPUT/$fileName_exon.blastn.txt &
+  qcovus" > ${OUTPUT}/${fileName}_exon.blastn.txt &
   
 blastn -subject $TRANSCRIPT \
--query $OUTPUT/$fileName_exon.fa -outfmt "6 \
- qcovus" > $OUTPUT/$fileName_exon.blastn.reverse.txt &
+-query ${OUTPUT}/${fileName}_exon.fa -outfmt "6 \
+ qcovus" > ${OUTPUT}/${fileName}_exon.blastn.reverse.txt &
  
  #Protein BLAST
  
-blastp -subject $OUTPUT/$fileName_protein.fa \
+blastp -subject ${OUTPUT}/${fileName}_protein.fa \
 -query $PROTEIN -outfmt "6 slen qlen sstart qstart send qend length pident \
-qcovs" > $OUTPUT/$fileName_protein.blastp.txt &
+qcovs" > ${OUTPUT}/${fileName}_protein.blastp.txt &
   
 blastp -subject $PROTEIN \
--query $OUTPUT/$fileName_protein.fa -outfmt "6 \
-qcovs" > $OUTPUT/$fileName_protein.blastp.reverse.txt &
+-query ${OUTPUT}/${fileName}_protein.fa -outfmt "6 \
+qcovs" > ${OUTPUT}/${fileName}_protein.blastp.reverse.txt &
 
 #Concatenate BLAST and reverse BLAST
 
-for i in `ls $OUTPUT | grep blastp.txt$`; do
+for i in `ls ${OUTPUT} | grep blastp.txt$`; do
 sample=`basename -s .txt $i`
-paste $OUTPUT/${sample}.txt $OUTPUT/${sample}.reverse.txt > \
-$OUTPUT/${sample}.combined.txt
+paste ${OUTPUT}/${sample}.txt ${OUTPUT}/${sample}.reverse.txt > \
+${OUTPUT}/${sample}.combined.txt
 done
 
-for i in `ls $OUTPUT | grep blastn.txt$`; do
+for i in `ls ${OUTPUT} | grep blastn.txt$`; do
 sample=`basename -s .txt $i`
-paste $OUTPUT/${sample}.txt $OUTPUT/${sample}.reverse.txt > \
-$OUTPUT/${sample}.combined.txt
+paste ${OUTPUT}/${sample}.txt ${OUTPUT}/${sample}.reverse.txt > \
+${OUTPUT}/${sample}.combined.txt
 done
 
 
