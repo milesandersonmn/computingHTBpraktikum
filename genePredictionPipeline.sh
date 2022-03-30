@@ -30,7 +30,7 @@ gth -genomic $GENOME -cdna $TRANSCRIPT -protein $PROTEIN \
 -gff3out -o ${OUTPUT}/${fileName}.gff3 -startcodon -finalstopcodon -cdnaforward \
 -skipalignmentout -v -exact -species maize -force
 
-gffread -w ${OUTPUT}/${fileName}_exon.fa -g $GENOME ${OUTPUT}/${fileName}.gff3 &
+gffread -w ${OUTPUT}/${fileName}_exon.fa -g $GENOME ${OUTPUT}/${fileName}.gff3
 
 gffread -C -x ${OUTPUT}/${fileName}_CDS.fa -g $GENOME ${OUTPUT}/${fileName}.gff3
 
@@ -40,21 +40,21 @@ seqkit translate ${OUTPUT}/${fileName}_CDS.fa > ${OUTPUT}/${fileName}_protein.fa
 
 blastn -subject ${OUTPUT}/${fileName}_exon.fa \
 -query $TRANSCRIPT -outfmt "6 slen qlen sstart qstart send qend length pident\
-  qcovus" > ${OUTPUT}/${fileName}_exon.blastn.txt &
+  qcovus" > ${OUTPUT}/${fileName}_exon.blastn.txt &&
   
 blastn -subject $TRANSCRIPT \
 -query ${OUTPUT}/${fileName}_exon.fa -outfmt "6 \
- qcovus" > ${OUTPUT}/${fileName}_exon.blastn.reverse.txt &
+ qcovus" > ${OUTPUT}/${fileName}_exon.blastn.reverse.txt &&
  
  #Protein BLAST
  
 blastp -subject ${OUTPUT}/${fileName}_protein.fa \
 -query $PROTEIN -outfmt "6 slen qlen sstart qstart send qend length pident \
-qcovs" > ${OUTPUT}/${fileName}_protein.blastp.txt &
+qcovs" > ${OUTPUT}/${fileName}_protein.blastp.txt &&
   
 blastp -subject $PROTEIN \
 -query ${OUTPUT}/${fileName}_protein.fa -outfmt "6 \
-qcovs" > ${OUTPUT}/${fileName}_protein.blastp.reverse.txt &
+qcovs" > ${OUTPUT}/${fileName}_protein.blastp.reverse.txt &&
 
 #Concatenate BLAST and reverse BLAST
 
