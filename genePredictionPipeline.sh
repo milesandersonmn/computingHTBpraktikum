@@ -28,7 +28,7 @@ fileName=${genomeName}_${geneModel}
 
 gth -genomic $GENOME -cdna $TRANSCRIPT -protein $PROTEIN \
 -gff3out -o ${OUTPUT}/${fileName}.gff3 -startcodon -finalstopcodon -cdnaforward \
--skipalignmentout -v -exact -species maize -force
+-skipalignmentout -exact -species maize -force
 
 gffread -w ${OUTPUT}/${fileName}_exon.fa -g $GENOME ${OUTPUT}/${fileName}.gff3
 
@@ -70,7 +70,7 @@ transcriptCount=`cat ${OUTPUT}/${fileName}_exon.blastn.combined.txt | awk '{prin
 
 proteinCount=`cat ${OUTPUT}/${fileName}_protein.blastp.combined.txt | awk '{print $1}' | uniq | wc -l`
 
-echo "Number of predicted mRNA transcripts: ${transcriptCount} \n Number of predicted proteins: ${proteinCount}"
+echo -e "Number of predicted mRNA transcripts: ${transcriptCount} \nNumber of predicted proteins: ${proteinCount}"
 
 
 
