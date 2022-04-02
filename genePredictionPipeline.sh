@@ -39,7 +39,7 @@ seqkit translate ${OUTPUT}/${fileName}_CDS.fa > ${OUTPUT}/${fileName}_protein.fa
 #Exon BLAST
 
 blastn -subject ${OUTPUT}/${fileName}_exon.fa \
--query $TRANSCRIPT -outfmt "6 slen qlen sstart qstart send qend length pident\
+-query $TRANSCRIPT -outfmt "6 sseqid slen qlen sstart qstart send qend length pident\
   qcovus" > ${OUTPUT}/${fileName}_exon.blastn.txt &&
   
 blastn -subject $TRANSCRIPT \
@@ -49,7 +49,7 @@ blastn -subject $TRANSCRIPT \
  #Protein BLAST
  
 blastp -subject ${OUTPUT}/${fileName}_protein.fa \
--query $PROTEIN -outfmt "6 slen qlen sstart qstart send qend length pident \
+-query $PROTEIN -outfmt "6 sseqid slen qlen sstart qstart send qend length pident \
 qcovs" > ${OUTPUT}/${fileName}_protein.blastp.txt &&
   
 blastp -subject $PROTEIN \
@@ -63,6 +63,14 @@ ${OUTPUT}/${fileName}_protein.blastp.combined.txt
 
 paste ${OUTPUT}/${fileName}_exon.blastn.txt ${OUTPUT}/${fileName}_exon.blastn.reverse.txt > \
 ${OUTPUT}/${fileName}_exon.blastn.combined.txt
+
+#Count number of mRNA transcripts and proteins output
+
+transcriptCount=`cat ${OUTPUT}/${fileName}_exon.blastn.combined.txt | awk '{print $1}' | uniq | wc -l`
+
+proteinCount=`cat ${OUTPUT}/${fileName}_protein.blastp.combined.txt | awk '{print $1}' | uniq | wc -l`
+
+echo "Number of predicted mRNA transcripts: ${transcriptCount} \n Number of predicted proteins: ${proteinCount}"
 
 
 
