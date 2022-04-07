@@ -1,246 +1,393 @@
-#Create GFF
-for i in `ls Genome | grep '.fa$'`; do
-sample=`basename -s .fa $i`
-input=${sample}.fa
-output=${sample}_gene2.gff3
-gth -genomic Genome/${input} -cdna Target/Zm00001d049443_mRNA2.fa -gff3out\
- -o ${output} -startcodon -finalstopcodon -cdnaforward -intermediate -v
+#Create parent genome file names text file; for while loops
+
+ls ~/Genome | grep 'fa$' > ~/Genomes.txt
+
+#Create target transcript file names text file; for while loops 
+
+ls ~/Target | grep 'T00[[:digit:]].fa$' > ~/Targets.txt
+
+#Index parent genomes
+
+for i in `ls ~/Genome | grep '.fa$'`; do
+samtools faidx ~/Genome/$i
 done
 
-#Create CDS GFF
-for i in `ls | grep 'gene2.gff3$'`; do
-sample=`basename -s .gff3 $i`
-target=`basename -s _gene2 ${sample}`
-gff=${sample}.gff3
-output=${sample}_CDS.gff3
-fasta=${target}.fa
-gt cds -seqfile Genome/${fasta} -v -matchdescstart -force -o CDSannotation/${output} \
-${gff}
-done
+#Create GFFs
 
-#Rename files
-for i in `ls | grep 'gene1.gff3$'`; do
-sample=`basename -s _gene1.gff3 $i`
-mv $i GFFs/${sample}_Zm00001d049443_mRNA1.gff3
-done
+while read Genomes; do 
+genomeFasta=`echo $Genomes | awk '{print $1}'`
+outputGenomeName=`echo $Genomes | awk '{print $2}'`
+while read Targets; do 
+targetName=`basename -s .fa $Targets`
+output=${outputGenomeName}.${targetName}.gff3
+gth -genomic ~/Genome/${genomeFasta} -cdna ~/Target/${Targets} -gff3out -o ~/GFFs/${output} \
+-startcodon -finalstopcodon -cdnaforward -skipalignmentout -v -exact -species maize -force & 
+done <~/Targets.txt 
+wait
+done <~/Genomes.txt
 
-for i in `ls | grep 'gene2_transcript.fa$'`; do
-sample=`basename -s _gene2_transcript.fa $i`
-mv $i transcriptSequences/${sample}_Zm00001d049443_mRNA2_transcript.fa
-done
+#Create Exon fastas
 
-for i in `ls | grep 'gene2_CDS.fa$'`; do
-sample=`basename -s _gene2_CDS.fa $i`
-mv $i ${sample}_Zm00001d049443_mRNA2_CDS.fa
-done
-
-#Index reference genomes
-for i in `ls | grep '.fa$'`; do
-gt seq -recreate $i
-done
-
-#Create CDS GFF
-
-for i in `ls ~/GFFs | grep 'mRNA1.gff3$'`; do
-sample=`basename -s .gff3 $i`
-reference=`basename -s _Zm00001d049443_mRNA1.gff3 $i`
-gt cds -startcodon yes -finalstopcodon yes -usedesc yes -v -force -seqfile ~/Genome/${reference}.fa \
--o ~/CDSannotation/${sample}_CDS.gff3 ~/GFFs/${sample}.gff3
-done
-
-#Create Exon fasta
-
-for s in mRNA1 mRNA2; do
-for i in `ls GFFs | grep "${s}.gff3$"`; do
-sample=`basename -s .gff3 $i`
-target=`basename -s _Zm00001d049443_${s} ${sample}`
-gff=${sample}.gff3
-output=${sample}.fa
-fasta=${target}.fa
-gffread -w exonSequence/${output} -g Genome/${fasta} GFFs/${gff}
-done
-done 
-
-#Extract CDS fasta sequence
-for s in mRNA1 mRNA2; do
-for i in `ls CDSannotation | grep ${s}_CDS.gff3$`; do
-sample=`basename -s .gff3 $i`
-target=`basename -s _Zm00001d049443_${s}_CDS ${sample}`
-gff=${sample}.gff3
-output=${sample}.fa
-fasta=${target}.fa
-gffread -C -x CDSsequence/${output} -g Genome/${fasta} CDSannotation/${gff} &
+while read Genomes; do
+genomeName=`echo $Genomes | awk '{print $2}'`
+genomeFile=`echo $Genomes | awk '{print $1}'`
+for i in `ls ~/GFFs | grep "$genomeName"`; do
+gene=`basename -s .gff3 $i`
+gff=${gene}.gff3
+output=${gene}.fa
+gffread -w ~/exonSequence/${output} -g ~/Genome/${genomeFile} ~/GFFs/${gff} &
 done
 wait
-done
+done <~/Genomes.txt
 
-#Translate CDS to protein
-for i in `ls ~/CDSsequence | grep '.fa$'`; do
+#Extract CDS fasta sequences
+
+while read Genomes; do
+genomeName=`echo $Genomes | awk '{print $2}'`
+genomeFile=`echo $Genomes | awk '{print $1}'`
+for i in `ls ~/GFFs | grep "$genomeName"`; do
+gene=`basename -s .gff3 $i`
+gff=${gene}.gff3
+output=${gene}_CDS.fa
+gffread -C -x ~/CDSsequence/${output} -g ~/Genome/${genomeFile} ~/GFFs/${gff} &
+done
+wait
+done <~/Genomes.txt
+
+#Translate CDS to proteins
+
+while read Genomes; do
+genomeName=`echo $Genomes | awk '{print $2}'`
+genomeFile=`echo $Genomes | awk '{print $1}'`
+for i in `ls ~/CDSsequence | grep "$genomeName"`; do
 sample=`basename -s .fa $i`
-seqkit translate CDSsequence/$i > ~/translatedProtein/${sample}_protein.fa
+seqkit translate CDSsequence/$i > ~/translatedProtein/${sample}_protein.fa &
 done
-
-
-
-
-
-for i in `ls Genome | grep '.fa$'`; do
-samtools faidx Genome/$i
-done
-
-
+wait
+done <~/Genomes.txt
 
 #BLAST parameters 
 
 sseqid slen sstart send sseq evalue bitscore score length pident qcovus
 
-#Split multifasta
+#Nucleotide BLAST loop and reversed query/subject BLAST loop
 
-for i in `ls .. | grep '.fa$'`; do
-seqkit split ../$i -i
-done
-
-#BLAST loop
-
-for s in mRNA1 mRNA2; do
-for i in `ls ~// | grep .fa$`; do
-sample=`basename -s .fa $i`
+while read Targets; do
+targetName=`echo $Targets`
+for i in `ls ~/exonSequence/ | grep $targetName`; do
+gene=`basename -s .fa $i`
 blastn -subject ~/exonSequence/$i\
- -query ~/Target/Zm00001d049443_${s}.fa -outfmt "6 sseqid qseqid slen sstart send evalue bitscore\
-  score length pident qcovus" > ~/BLASTResults/${sample}.blastn.txt &
+ -query ~/Target/$targetName -outfmt "6 slen qlen sstart qstart send qend length pident\
+  qcovus" > ~/BLASTResults/${gene}.blastn.txt &
 done
 wait
-done
+done <~/Targets.txt
 
-
-for s in mRNA1 mRNA2; do
-for i in `ls ~/exonSequence/splitfastas`; do
-for j in `ls ~/exonSequence/splitfastas/$i`; do
-sample=`basename -s .fa.split $j`
-blastn -subject ~/exonSequence/splitfastas/$i/$j\
- -query ~/Target/Zm00001d049443_${s}.fa -outfmt "6 sseqid qseqid slen sstart send evalue bitscore\
-  score length pident qcovus" > ~/BLASTResults/${sample}.blastn.txt &
+while read Targets; do
+targetName=`echo $Targets`
+for i in `ls ~/exonSequence/ | grep $targetName`; do
+gene=`basename -s .fa $i`
+blastn -subject ~/Target/$targetName\
+ -query ~/exonSequence/$i -outfmt "6 \
+ qcovus" > ~/BLASTResults/${gene}.blastn.reverse.txt &
 done
 wait
-done
-done
+done <~/Targets.txt
 
-#BLAST loop reversed query/subject
 
-for s in mRNA1 mRNA2; do
-for i in `ls ~/exonSequence/ | grep .fa$`; do
-sample=`basename -s .fa $i`
-blastn -subject ~/Target/Zm00001d049443_${s}.fa\
- -query ~/exonSequence/$i -outfmt "6 sseqid qseqid slen sstart send evalue bitscore\
-  score length pident qcovus" > ~/BLASTResults/${sample}.blastn.reverse.txt &
+#Same command but for protein BLAST
+
+while read Targets; do
+targetName=`echo $Targets | cut -d '_' -f 1`
+for i in `ls ~/translatedProtein/ | grep $targetName`; do
+protein=`basename -s .fa $i`
+blastp -subject ~/translatedProtein/$i \
+-query ~/Target/$Targets -outfmt "6 slen qlen sstart qstart send qend length pident qcovs" \
+> ~/BLASTProteinResults/${protein}.blastp.txt &
 done
 wait
-done
+done <~/proteinTargets.txt
 
-for s in mRNA1 mRNA2; do
-for i in `ls ~/CDSsequence/ | grep .fa$`; do
-sample=`basename -s .fa $i`
-blastp -subject ~/Target/Zm00001d049443_${s}.fa\
- -query ~/CDSsequence/$i -outfmt "6 sseqid qseqid slen sstart send evalue bitscore\
-  score length pident qcovus" > ~/BLASTResults/${sample}.blastp.reverse.txt &
+while read Targets; do
+targetName=`echo $Targets | cut -d '_' -f 1`
+for i in `ls ~/translatedProtein/ | grep $targetName`; do
+protein=`basename -s .fa $i`
+blastp -subject ~/Target/$Targets \
+-query ~/translatedProtein/$i -outfmt "6 \
+qcovs" > ~/BLASTProteinResults/${protein}.blastp.reverse.txt &
 done
 wait
+done <~/proteinTargets.txt
+
+#Concatenate BLAST.txt and BLAST.reverse.txt to make tables to read into R scripts
+
+for i in `ls ~/BLASTProteinResults | grep blastp.txt$`; do
+sample=`basename -s .txt $i`
+paste ~/BLASTProteinResults/${sample}.txt ~/BLASTProteinResults/${sample}.reverse.txt > \
+~/BLASTProteinResults/${sample}.combined.txt
 done
 
+for i in `ls ~/BLASTResults | grep blastn.txt$`; do
+sample=`basename -s .txt $i`
+paste ~/BLASTResults/${sample}.txt ~/BLASTResults/${sample}.reverse.txt > \
+~/BLASTResults/${sample}.combined.txt
+done
 
-for s in mRNA1 mRNA2; do
-for i in `ls ~/exonSequence/splitfastas`; do
-for j in `ls ~/exonSequence/splitfastas/$i`; do
-sample=`basename -s .fa.split $j`
-blastn -subject ~/Target/Zm00001d049443_${s}.fa\
- -query ~/exonSequence/splitfastas/$i/$j -outfmt "6 sseqid slen sstart send evalue bitscore\
-  score length pident qcovus" > ~/BLASTResults/${sample}.blastn.reverse.txt &
+# Create multifastas for exon and protein multiple sequence alignments
+
+while read Targets; do
+targetName=`basename -s .fa $Targets`
+for i in `ls ~/translatedProtein | grep $targetName`; do
+header=`echo $i | cut -d '.' -f 1`
+cp ~/translatedProtein/$i ~/translatedProtein/tmp.fa
+sed -i "1s/.*/>$header/" ~/translatedProtein/tmp.fa
+cat ~/translatedProtein/tmp.fa >> ~/multifastasMSA/${targetName}_CDS_protein.fa
+done
+done <Targets.txt
+rm ~/translatedProtein/tmp.fa
+
+while read Targets; do
+targetName=`basename -s .fa $Targets`
+for i in `ls ~/exonSequence | grep $targetName`; do
+header=`echo $i | cut -d '.' -f 1`
+cp ~/exonSequence/$i ~/exonSequence/tmp.fa
+sed -i "1s/.*/>$header/" ~/exonSequence/tmp.fa
+cat ~/exonSequence/tmp.fa >> ~/multifastasMSA/${targetName}.fa
+done
+done <Targets.txt
+rm ~/translatedProtein/tmp.fa
+
+
+#Generate MSAs
+
+for i in `ls ~/multifastasMSA/`; do
+name=`basename -s .fa $i`
+clustalo -i multifastasMSA/$i -v \
+-o ~/multipleSequenceAlignments/${name}.a2m \
+--clustering-out=~/multipleSequenceAlignments/${name}.cluster --force
+done
+ 
+#BLAST to outputs from B73 (control genome for workflow)
+ 
+while read Targets; do
+targetName=`echo $Targets`
+for i in `ls ~/exonSequence/ | grep $targetName`; do
+gene=`basename -s .fa $i`
+blastn -subject ~/exonSequence/B73.$targetName \
+-query ~/exonSequence/$i -outfmt "6 \
+qcovus" > ~/nucleotideBLASTB73/${gene}.blastn.reverse.txt &
 done
 wait
-done
-done
+done <~/Targets.txt
 
-for s in mRNA1 mRNA2; do
-for i in `ls ~/exonSequence/splitfastas`; do
-for j in `ls ~/exonSequence/splitfastas/$i`; do
-sample=`basename -s .fa.split $j`
-blastn -subject ~/Target/Zm00001d049443_${s}.fa\
- -query ~/exonSequence/splitfastas/$i/$j -outfmt "6 sseqid qseqid slen sstart send evalue bitscore\
-  score length pident qcovus" > ~/BLASTResults/${sample}.blastn.reverse.txt &
+while read Targets; do
+targetName=`echo $Targets`
+for i in `ls ~/exonSequence/ | grep $targetName`; do
+gene=`basename -s .fa $i`
+blastn -subject ~/exonSequence/$i \
+-query ~/exonSequence/B73.$targetName -outfmt "6 \
+slen qlen sstart qstart send qend length pident qcovus" > ~/nucleotideBLASTB73/${gene}.blastn.txt &
 done
 wait
-done
-done
-
-#BLAST proteins
-
-for s in 1 2; do
-for i in `ls ~/translatedProtein/splitfastas`; do
-for j in `ls ~/translatedProtein/splitfastas/$i | grep mRNA${s}`; do
-sample=`basename -s .fa $j`
-blastp -subject ~/translatedProtein/splitfastas/$i\
- -query ~/Target/Zm00001d049443_protein${s}.fa -outfmt "6 sseqid qseqid slen sstart send evalue bitscore\
-  score length pident qcovus" > ~/BLASTProteinResults/${sample}.blastp.txt &
-done
-wait
-done
-done
-
-for s in 1 2; do
-for i in `ls ~/translatedProtein/splitfastas`; do
-for j in `ls ~/translatedProtein/splitfastas/$i | grep mRNA${s}`; do
-sample=`basename -s .fa $j`
-blastp -subject ~/Target/Zm00001d049443_protein${s}.fa\
- -query ~/translatedProtein/splitfastas/$i -outfmt "6 sseqid qseqid slen sstart send evalue bitscore\
-  score length pident qcovus" > ~/BLASTProteinResults/${sample}.blastp.reverse.txt &
-done
-wait
-done
-done
-
-for i in `ls ~/translatedProtein/splitfastas`; do
-for j in `ls ~/translatedProtein/splitfastas/$i | grep PHG83_v1_scaffolds_Zm00001d049443_mRNA1`; do
-sample=`basename -s .fa $j`
-blastp -subject ~/translatedProtein/splitfastas/$i\
- -query ~/Target/Zm00001d049443_protein1.fa -outfmt "6 sseqid qseqid slen sstart send evalue bitscore\
-  score length pident qcovus" > ~/BLASTProteinResults/${sample}.blastp.txt &
-done
-done
-
-
-#Concatenate BLAST.txt and BLAST.reverse.txt
+done <~/Targets.txt
 
 for i in `ls | grep blastn.txt$`; do
 sample=`basename -s .txt $i`
-cat ${sample}.txt > ${sample}_fullResults.txt
-cat ${sample}.reverse.txt >> ${sample}_fullResults.txt
+paste ${sample}.txt ${sample}.reverse.txt > ${sample}.combined.txt
 done
 
-#Rename Files
+while read Targets; do
+targetName=`echo $Targets`
+for i in `ls ~/CDSsequence/ | grep $targetName`; do
+gene=`basename -s .fa $i`
+blastn -subject ~/CDSsequence/B73.$targetName \
+-query ~/CDSsequence/$i -outfmt "6 \
+qcovus" > ~/CDSBLASTB73/${gene}.blastn.reverse.txt &
+done
+wait
+done <~/CDSSequenceTargets.txt
 
-for i in `ls | grep B73`; do
-suffix=`echo $i | cut -d '_' -f 2,3,4`
-mv $i B73.${suffix}
+while read Targets; do
+targetName=`echo $Targets`
+for i in `ls ~/CDSsequence/ | grep $targetName`; do
+gene=`basename -s .fa $i`
+blastn -subject ~/CDSsequence/$i \
+-query ~/CDSsequence/B73.$targetName -outfmt "6 \
+slen qlen sstart qstart send qend length pident qcovus" > ~/CDSBLASTB73/${gene}.blastn.txt &
+done
+wait
+done <~/CDSSequenceTargets.txt
+
+for i in `ls | grep blastn.txt$`; do
+sample=`basename -s .txt $i`
+paste ${sample}.txt ${sample}.reverse.txt > ${sample}.combined.txt
 done
 
-for i in `ls | grep v1`; do
-sample=`echo $i | cut -d '_' -f 1`
-suffix=`echo $i | cut -d '_' -f 4,5,6`
-mv $i ${sample}.${suffix}
+while read Targets; do
+targetName=`echo $Targets`
+for i in `ls ~/translatedProtein/ | grep $targetName`; do
+protein=`basename -s .fa $i`
+blastp -subject ~/translatedProtein/B73.$targetName -query ~/translatedProtein/$i -outfmt "6 \
+qcovs" > ~/proteinBLASTB73/${protein}.blastp.reverse.txt &
+done
+wait
+done <~/CDSTargets.txt
+
+while read Targets; do
+targetName=`echo $Targets`
+for i in `ls ~/translatedProtein/ | grep $targetName`; do
+protein=`basename -s .fa $i`
+blastp -subject ~/translatedProtein/$i -query ~/translatedProtein/B73.$targetName -outfmt "6 \
+slen qlen sstart qstart send qend length pident qcovs" > ~/proteinBLASTB73/${protein}.blastp.txt &
+done
+wait
+done <~/CDSTargets.txt
+
+for i in `ls | grep blastp.txt$`; do
+sample=`basename -s .txt $i`
+paste ${sample}.txt ${sample}.reverse.txt > ${sample}.combined.txt
 done
 
-for i in `ls | grep B73`; do
-suffix=`echo $i | cut -d '_' -f 2,3,4,5,6`
-mv $i B73.${suffix}
+#Display MSAs in terminal
+
+for i in `ls ~/multipleSequenceAlignments | grep protein`; do echo ~/multipleSequenceAlignments/$i; 
+alv --only-variable ~/multipleSequenceAlignments/$i; done
+
+#Extract Scaffold fastas for BLAT and AUGUSTUS
+
+for i in `ls targetGFFs`; do
+while read GFF; do
+sample=`basename -s .gff3 $GFF`
+cat GFFs/${GFF}| grep -v '#' | \
+awk '$3 == "gene"' | awk '{print $1}' > targetScaffolds/${sample}_scaffold.txt
+done < ~/targetGFFs/$i
 done
 
-for i in `ls | grep v1`; do
-sample=`echo $i | cut -d '_' -f 1`
-suffix=`echo $i | cut -d '_' -f 4,5,6,7,8`
-mv $i ${sample}.${suffix}
+for i in `ls targetScaffolds`; do
+fileName=`basename -s .txt $i`
+parent=`echo $i | cut -f 1 -d '.'`
+genome=`ls Genome | grep $parent | grep .fa$`
+seqtk subseq Genome/$genome targetScaffolds/$i > targetScaffoldFastas/${fileName}.fa
 done
 
-for i in `ls | grep B73.mRNA`; do
-suffix=`echo $i | cut -d '.' -f 2,3,4,5`
-mv $i B73.Zm00001d049443_${suffix}
+#BLAT and Augustus
+
+for i in `ls cDNA`; do
+geneModel=`basename -s _cDNAs.fa $i`
+for j in `ls targetScaffoldFastas | grep $geneModel`; do
+parent=`echo $j | cut -f 1 -d '.'`
+blat targetScaffoldFastas/$j cDNA/$i BLAToutput/${parent}.${geneModel}.psl &
 done
+wait
+done
+
+for i in `ls BLAToutput`; do
+fileName=`basename -s .psl $i`
+blat2hints.pl --in=BLAToutput/${i} --out=hintGFFs/${fileName}.hints.E.gff
+done
+
+for i in `ls hintGFFs | grep -v B73`; do
+fileName=`basename -s .hints.E.gff $i`
+fasta=`ls targetScaffoldFastas | grep $fileName`
+augustus --species=maize --hintsfile=~/hintGFFs/$i \
+--extrinsicCfgFile=~/anaconda3/envs/Augustus/config/extrinsic/extrinsic.ME.cfg \
+targetScaffoldFastas/$fasta --gff3=on --softmasking=0 --protein=on \
+--codingseq=on --stop=on --start=on > AugustusOutput/$fileName.augustus.gff3 &
+done
+
+#Produce CDS and protein sequences from Augustus annotations
+
+for i in `ls AugustusOutput | grep gff3$`; do
+fileName=`basename -s .augustus.gff3 $i`
+seqFile=`ls targetScaffoldFastas | grep $fileName | grep fa$`
+getAnnoFasta.pl AugustusOutput/$i --seqfile=targetScaffoldFastas/$seqFile --protein=on --codingseq=on
+done
+
+#Create multifastas for Augustus protein predictions, GenomeThreader protein predictions, and controls from MaizeGDB
+
+while read gene; do
+protein=`ls Target | grep ${gene}_P | grep fa$`
+for i in `ls AugustusOutput | grep .aa$ | grep $gene`; do
+parentModel=`basename -s .augustus3.aa $i`
+for j in `ls translatedProtein | grep $parentModel`; do
+cat Target/$protein > AugustusMSA/$parentModel.fa
+cat translatedProtein/$j >> AugustusMSA/$parentModel.fa
+cat AugustusOutput/$i >> AugustusMSA/$parentModel.fa
+done
+done
+done < AugustusCompare.txt
+
+#MSA for Augustus protein predictions, GenomeThreader protein predictions, and controls from MaizeGDB
+
+for i in `ls ~/AugustusMSA/ | grep fa$`; do
+name=`basename -s .fa $i`
+clustalo -i ~/AugustusMSA/$i -v \
+-o ~/AugustusMSA/${name}.a2m \
+--force 
+done
+
+#Visualize MSA in terminal
+
+for i in `ls AugustusMSA/ | grep .a2m`; do 
+echo $i
+alv AugustusMSA/$i; done
+
+samtools faidx genome.fa
+gt gff3 -sortlines -tidy -retainids myfile.gff > myfile.sorted.gff
+bgzip myfile.sorted.gff
+tabix myfile.sorted.gff.gz
+
+#Augustus with prediction start/end locations and strandedness extracted from GenomeThreader GFFs and alternative transcripts from evidence
+
+for i in `ls hintGFFs | grep -v B73`; do
+fileName=`basename -s .hints.E.gff $i`
+fasta=`ls targetScaffoldFastas | grep $fileName | grep .fa$`
+for j in `ls GFFs | grep ${fileName}`; do
+start=`cat GFFs/$j | grep -v '#' | \
+awk '$3 == "gene"' | awk '{print $4-500}'`
+end=`cat GFFs/$j| grep -v '#' | \
+awk '$3 == "gene"' | awk '{print $5+500}'`
+strand=`cat GFFs/$j | grep -v '#' | awk '$3 == "gene"' | awk '{print $7}'`
+if [[ ${strand} == '+' ]]
+then 
+	orientation="forward"
+else 
+	orientation="backward"
+fi
+augustus --species=maize --hintsfile=~/hintGFFs/$i \
+--extrinsicCfgFile=~/anaconda3/envs/Augustus/config/extrinsic/extrinsic.ME.cfg \
+targetScaffoldFastas/$fasta --gff3=on --softmasking=0 --protein=on \
+--codingseq=on --stop=on --start=on --predictionStart=$start --predictionEnd=$end --strand=$orientation \
+--alternatives-from-evidence=true \
+> AugustusOutput/$fileName.augustus.gff3 &
+done
+done
+
+#IGV preparation (only for gene model Zm00001d022554)
+
+for i in `ls targetScaffoldFastas | grep fa$`; do
+samtools faidx targetScaffoldFastas/$i
+done
+
+for i in `ls targetScaffoldFastas | grep 22554`; do
+cp targetScaffoldFastas/$i igvFiles
+done
+
+for i in `ls GFFs | grep 'Zm00001d022554'`; do
+fileName=`basename -s .gff3 $i`
+gt gff3 -sortlines -tidy -retainids GFFs/$i > \
+igvFiles/$fileName.sorted.gff3
+done
+
+for i in `ls AugustusOutput | grep 'Zm00001d022554' | grep gff3$`; do
+fileName=`basename -s .gff3 $i`
+gt gff3 -sortlines -tidy -retainids AugustusOutput/$i > \
+igvFiles/$fileName.sorted.gff3
+done
+
+for i in `ls igvFiles | grep gff3$`; do
+bgzip igvFiles/$i
+tabix igvFiles/$i.gz
+done
+
+###scp igvFiles/ to local machine for igv visualization
